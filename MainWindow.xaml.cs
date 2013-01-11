@@ -45,38 +45,22 @@ namespace X360Decompiler
     /// </summary>
     public partial class MainWindow : Window
     {
-        XPeParser pe;
         PdbParser.PdbParser pdb;
-        XenonInstructions instrs = new XenonInstructions();
-
-        public class Function
-        {
-            public Function()
-            {
-                Name = "";
-                Address = 0;
-                Size = 0;
-            }
-
-            public String Name;
-            public uint Address;
-            public uint Size;
-            public List<FunctionBlock> Blocks = null;
-            public List<Loop> Loops = null;
-        }
-
-        List<Function> Functions = new List<Function>();
+        State state;
 
         public class ListViewFunction
         {
-            public ListViewFunction(string name, string addr)
+            public ListViewFunction(string name, uint addr, Function f)
             {
                 FuncName = name;
-                FuncAddr = addr;
+                FuncAddr = "0x" + addr.ToString("X8");
+                Details = f;
             }
 
             public string FuncName { get; set; }
             public string FuncAddr { get; set; }
+
+            public Function Details;
         }
 
         public class ListViewInstr
@@ -102,7 +86,6 @@ namespace X360Decompiler
         public MainWindow()
         {
             InitializeComponent();
-            instrs.SetupTables();
         }
 
         public int FunctionAddressComparison(Function f1, Function f2)
@@ -118,7 +101,7 @@ namespace X360Decompiler
             bool? res = ofd.ShowDialog();
             if (res.HasValue && res == true)
             {
-                pe = new XPeParser(ofd.FileName);
+                state = new State(ofd.FileName);
                 PdbMenu.IsEnabled = true;
             }
         }
@@ -136,19 +119,20 @@ namespace X360Decompiler
 
                 foreach (Symbol s in syms)
                 {
-                    UInt32 addr = s.Rva + (uint) pe.optHdr.ImageBase;
-                    String addrStr = "0x" + addr.ToString("X8");
-                    _FuncCollection.Add(new ListViewFunction(s.Name, addrStr));
+                    UInt32 addr = s.Rva + (uint) state.Pe.GetImageBase();
 
-                    Function f = new Function();
+                    Function f = new Function(state, s.Name, addr);
                     f.Name = s.Name;
                     f.Address = addr;
-                    f.Size = 0xFFFFFFFF;
+                    
+                    ListViewFunction lvf = new ListViewFunction(s.Name, addr, f);
+                    _FuncCollection.Add(lvf);
 
-                    Functions.Add(f);
+                    f.ListViewEntry = lvf;
+                    state.Functions.Add(f);
                 }
 
-                Functions.Sort(FunctionAddressComparison);
+                state.Functions.Sort(FunctionAddressComparison);
             }
         }
 
@@ -189,299 +173,53 @@ namespace X360Decompiler
         private void DisassembleFunction(object sender, RoutedEventArgs e)
         {
             ListViewFunction item = (ListViewFunction)FunctionsView.SelectedItem;
-            uint addr = UInt32.Parse(item.FuncAddr.Substring(2), System.Globalization.NumberStyles.AllowHexSpecifier);
-            
-            int funcIndex = Functions.FindIndex(delegate(Function f) { return f.Address == addr; });
-            if (funcIndex < 0)
-                return;
+            Function f = item.Details;
 
-            if (Functions[funcIndex].Size == 0xFFFFFFFF || Functions[funcIndex].Blocks == null)
+            if (f.Size == 0xFFFFFFFF || f.Blocks == null)
             {
-                Functions[funcIndex].Size = FindFunctionSize(funcIndex);
-                FindDominators(Functions[funcIndex].Blocks);
+                f.FindSize();
+                FindDominators(f.Blocks);
             }
 
             _InstrCollection.Clear();
-            foreach (FunctionBlock block in Functions[funcIndex].Blocks)
+            foreach (FunctionBlock block in f.Blocks)
             {
-                uint offset = pe.Rva2Offset(block.StartAddress - (uint)pe.optHdr.ImageBase);
+                uint offset = state.Pe.Rva2Offset(block.StartAddress - (uint)state.Pe.optHdr.ImageBase);
 
                 for (uint i = 0; i < block.InstrCount; i++)
                 {
-                    uint instruction = pe.ReadInstruction(offset + i * 4);
+                    uint instruction = state.Pe.ReadInstruction(offset + i * 4);
 
-                    XenonInstructions.OpCodeInfo info = instrs.GetInfo(instruction);
+                    XenonInstructions.OpCodeInfo info = state.Instructions.GetInfo(instruction);
                     ListViewInstr instr = new ListViewInstr("0x" + (block.StartAddress + i * 4).ToString("X8"), info.Name, "");
                     _InstrCollection.Add(instr);
                 }
             }
         }
-        
-        public uint FindFunctionSize(int funcIndex)
-        {
-            /* Functions can't cross each other, so the maximum size is on the next function boundary */
-            uint addr = Functions[funcIndex].Address - (uint)pe.optHdr.ImageBase;
-            uint diff;
-            if (funcIndex != Functions.Count - 1)
-                diff = Functions[funcIndex + 1].Address - Functions[funcIndex].Address;
-            else
-                diff = pe.Rva2SectionEnd(addr) - addr;
-
-            diff = (uint) (diff & (~3));
-
-            /* Check that all instructions are valid, and stop at the first invalid instruction (if any) */
-            uint i = 0;
-            uint offset = pe.Rva2Offset(addr);
-            for (; i < diff / 4; i++)
-            {
-                uint instruction = pe.ReadInstruction(offset + i * 4);
-                XenonInstructions.OpCodeInfo info = instrs.GetInfo(instruction);
-                if (info.Id == XenonInstructions.Mnemonics.PPC_OP_INVALID)
-                    break;
-            }
-            diff = i * 4;
-
-            /* Build a call tree and find the maximum address */
-            List<FunctionBlock> fb = BuildCallTree(Functions[funcIndex].Address, diff);
-            Functions[funcIndex].Blocks = fb;
-
-            FunctionBlock lastBlock = fb[fb.Count - 1];
-            uint maxAddr = lastBlock.StartAddress + lastBlock.InstrCount * 4;
-
-            return maxAddr - Functions[funcIndex].Address;
-        }
-
-        List<FunctionBlock> BuildCallTree(uint address, uint maxLen)
-        {
-            List<FunctionBlock> ret = new List<FunctionBlock>();
-
-            FunctionBlock f1 = new FunctionBlock();
-            f1.StartAddress = address;
-            f1.InstrCount = maxLen / 4;
-            ret.Add(f1);
-
-            while (true)
-            {
-                int toAnalyze = -1;
-                for (int i = 0; i < ret.Count; i++)
-                {
-                    if (!ret[i].Analyzed)
-                    {
-                        toAnalyze = i;
-                        break;
-                    }
-                }
-
-                if (toAnalyze == -1)
-                    break;
-
-                AnalyzeBlock(ret, toAnalyze, address, address + maxLen);
-            }
-
-            AddLazyCalls(ret);
-
-            return ret;
-        }
-
-        void AnalyzeBlock(List<FunctionBlock> blocks, int curBlock, uint minFunctionAddr, uint maxFunctionAddr)
-        {
-            blocks[curBlock].Analyzed = true;
-
-            uint rva = blocks[curBlock].StartAddress - (uint)pe.optHdr.ImageBase;
-            uint offset = pe.Rva2Offset(rva);
-
-            bool cont = true;
-            for (uint i = 0; i < blocks[curBlock].InstrCount && cont; i++)
-            {
-                uint instruction = pe.ReadInstruction(offset + i * 4);
-                XenonInstructions.OpCodeInfo info = instrs.GetInfo(instruction);
-
-                /* A branch signals end of block. However a branch with link is just a call, and it doesn't end a block */
-                uint npc;
-                uint pc = blocks[curBlock].StartAddress + i * 4;
-
-                switch (info.Id)
-                {
-                    case XenonInstructions.Mnemonics.PPC_OP_B:
-                        {
-                            if ((instruction & 1) == 1)     // LK
-                                continue;
-
-                            if ((instruction & 2) == 2)     // AA
-                                npc = (uint)SignExtend26(instruction & 0x3FFFFFC);
-                            else
-                                npc = pc + (uint)SignExtend26(instruction & 0x3FFFFFC);
-
-                            AddBlock(blocks, curBlock, npc, minFunctionAddr, maxFunctionAddr);
-                            blocks[curBlock].InstrCount = i + 1;
-                            cont = false;
-
-                            break;
-                        }
-                    case XenonInstructions.Mnemonics.PPC_OP_BC:
-                        {
-                            if ((instruction & 1) == 1)    // LK
-                                continue;
-
-                            short bd = (short)(instruction & 0xFFFC);
-
-                            if ((instruction & 2) == 2)     // AA
-                                npc = (uint)(int)bd;
-                            else
-                                npc = (uint)(pc + bd);
-
-                            uint npc2 = pc + 4;
-                            AddBlock(blocks, curBlock, npc, minFunctionAddr, maxFunctionAddr);
-                            AddBlock(blocks, curBlock, npc2, minFunctionAddr, maxFunctionAddr);
-                            blocks[curBlock].InstrCount = i + 1;
-                            cont = false;
-
-                            break;
-                        }
-                    case XenonInstructions.Mnemonics.PPC_OP_BCCTR:
-                        {
-                            if ((instruction & 1) == 1)    // LK
-                                continue;
-
-                            if (((instruction >> 21) & 0x1F) != 20)
-                            {
-                                uint npc2 = pc + 4;
-                                AddBlock(blocks, curBlock, npc2, minFunctionAddr, maxFunctionAddr);
-                            }
-
-                            blocks[curBlock].InstrCount = i + 1;
-                            cont = false;
-                            break;
-                        }
-                    case XenonInstructions.Mnemonics.PPC_OP_BCLR:
-                        {
-                            if ((instruction & 1) == 1)    // LK
-                                continue;
-
-                            if (((instruction >> 21) & 0x1F) != 20)
-                            {
-                                uint npc2 = pc + 4;
-                                AddBlock(blocks, curBlock, npc2, minFunctionAddr, maxFunctionAddr);
-                            }
-
-                            blocks[curBlock].InstrCount = i + 1;
-                            cont = false;
-                            break;
-                        }
-                }
-            }
-
-            CleanupBlockList(blocks);
-        }
-
-        void AddBlock(List<FunctionBlock> blocks, int curBlock, uint npc, uint minFunctionAddr, uint maxFunctionAddr)
-        {
-            if (npc >= minFunctionAddr && npc < maxFunctionAddr)
-            {
-                /* This is an internal branch. Need to add this block if it's not already present */
-                bool found = false;
-                for (int j = 0; j < blocks.Count; j++)
-                {
-                    if (blocks[j].StartAddress == npc)
-                    {
-                        found = true;
-                        blocks[curBlock].Successors.Add(blocks[j]);
-                        blocks[j].Predecessors.Add(blocks[curBlock]);
-                        break;
-                    }
-                }
-
-                if (!found)
-                {
-                    FunctionBlock fb = new FunctionBlock();
-                    fb.StartAddress = npc;
-                    fb.Analyzed = false;
-                    if (npc < blocks[curBlock].StartAddress)
-                        fb.InstrCount = (blocks[curBlock].StartAddress - npc) / 4;
-                    else
-                        fb.InstrCount = (maxFunctionAddr - npc) / 4;
-
-                    blocks.Add(fb);
-                    blocks[curBlock].Successors.Add(fb);
-                    fb.Predecessors.Add(blocks[curBlock]);
-                }
-            }
-        }
-
-        void AddLazyCalls(List<FunctionBlock> blocks)
-        {
-            for (int i = 0; i < blocks.Count - 1; i++)
-            {
-                uint lastInstructionAddr = blocks[i].StartAddress + (blocks[i].InstrCount - 1) * 4;
-                uint rva = lastInstructionAddr - (uint)pe.optHdr.ImageBase;
-                uint offset = pe.Rva2Offset(rva);
-
-                uint instruction = pe.ReadInstruction(offset);
-                XenonInstructions.OpCodeInfo info = instrs.GetInfo(instruction);
-                switch (info.Id)
-                {
-                    case XenonInstructions.Mnemonics.PPC_OP_B:
-                    case XenonInstructions.Mnemonics.PPC_OP_BC:
-                    case XenonInstructions.Mnemonics.PPC_OP_BCCTR:
-                    case XenonInstructions.Mnemonics.PPC_OP_BCLR:
-                        break;
-                    default:
-                        blocks[i].Successors.Add(blocks[i + 1]);
-                        blocks[i + 1].Predecessors.Add(blocks[i]);
-                        break;
-                }
-            }
-        }
-
-        int FunctionBlockSorter(FunctionBlock f1, FunctionBlock f2)
-        {
-            return (int) f1.StartAddress - (int) f2.StartAddress; 
-        }
-
-        void CleanupBlockList(List<FunctionBlock> blocks)
-        {
-            blocks.Sort(FunctionBlockSorter);
-            for (int i = 0; i < blocks.Count - 1; i++)
-            {
-                if (blocks[i].StartAddress + blocks[i].InstrCount * 4 >= blocks[i + 1].StartAddress)
-                    blocks[i].InstrCount = (blocks[i + 1].StartAddress - blocks[i].StartAddress) / 4;
-            }
-        }
-
-        int SignExtend26(uint val)
-        {
-            int v = (int)(val << 6);
-            v >>= 6;
-            return v;
-        }
 
         private void DecompileFunction(object sender, RoutedEventArgs e)
         {
             ListViewFunction item = (ListViewFunction)FunctionsView.SelectedItem;
-            uint addr = UInt32.Parse(item.FuncAddr.Substring(2), System.Globalization.NumberStyles.AllowHexSpecifier);
+            Function f = item.Details;
 
-            int funcIndex = Functions.FindIndex(delegate(Function f) { return f.Address == addr; });
-            if (funcIndex < 0)
-                return;
-
-            if (Functions[funcIndex].Size == 0xFFFFFFFF || Functions[funcIndex].Blocks == null)
+            if (f.Size == 0xFFFFFFFF || f.Blocks == null)
             {
-                MessageBox.Show("Disassemble first before decompiling.");
-                return;
+                f.FindSize();
+                FindDominators(f.Blocks);
             }
 
-            Functions[funcIndex].Loops = FindLoops(Functions[funcIndex].Blocks);
-            DecompileEasy(funcIndex);
-            ComputeUseDefs(Functions[funcIndex].Blocks);
-            PropagateExpressions(Functions[funcIndex].Blocks);
-            LoopPhase2(Functions[funcIndex].Blocks, Functions[funcIndex].Loops);
-            IfElse(Functions[funcIndex].Blocks);
+            f.Loops = FindLoops(f.Blocks);
+            DecompileEasy(f);
+            ComputeUseDefs(f.Blocks);
+            PropagateExpressions(f.Blocks);
+            LoopPhase2(f.Blocks, f.Loops);
+            IfElse(f.Blocks);
 
             List<CStatement> statements = new List<CStatement>();
-            foreach (FunctionBlock b in Functions[funcIndex].Blocks)
+            foreach (FunctionBlock b in f.Blocks)
                 statements.AddRange(b.Statements);
 
-            string csource = "void " + Functions[funcIndex].Name + "()\n{\n";
+            string csource = "void " + f.Name + "()\n{\n";
             foreach (CStatement stat in statements)
             {
                 csource += "\t";
@@ -534,20 +272,6 @@ namespace X360Decompiler
             } while (changed);
         }
 
-        public class Loop
-        {
-            public FunctionBlock Header = null;
-            public FunctionBlock LoopBlock = null;
-            public List<FunctionBlock> Blocks = new List<FunctionBlock>();
-
-            public enum LoopKind
-            {
-                DoWhile, While, For
-            }
-
-            public LoopKind Kind = LoopKind.DoWhile;
-        }
-
         private Loop NaturalLoopForEdge(FunctionBlock header, FunctionBlock tail)
         {
             Stack<FunctionBlock> workList = new Stack<FunctionBlock>();
@@ -576,7 +300,7 @@ namespace X360Decompiler
                 }
             }
 
-            loop.Blocks.Sort(FunctionBlockSorter);
+            loop.Blocks.Sort(Function.FunctionBlockSorter);
             return loop;
         }
  
@@ -772,9 +496,9 @@ namespace X360Decompiler
 
                 uint precedingBlockStart = precBlock.StartAddress;
                 uint lastInstruction = precedingBlockStart + (precBlock.InstrCount - 1) * 4;
-                uint offset = pe.Rva2Offset(lastInstruction - (uint)pe.optHdr.ImageBase);
-                uint instruction = pe.ReadInstruction(offset);
-                XenonInstructions.OpCodeInfo info = instrs.GetInfo(instruction);
+                uint offset = state.Pe.Rva2Offset(lastInstruction - (uint)state.Pe.optHdr.ImageBase);
+                uint instruction = state.Pe.ReadInstruction(offset);
+                XenonInstructions.OpCodeInfo info = state.Instructions.GetInfo(instruction);
 
                 if (info.Id == XenonInstructions.Mnemonics.PPC_OP_B)
                 {
@@ -798,7 +522,7 @@ namespace X360Decompiler
                 if (last.Statements.Count != 0)
                 {
                     blocks.Add(last);
-                    blocks.Sort(FunctionBlockSorter);
+                    blocks.Sort(Function.FunctionBlockSorter);
                 }
 
                 /* This will have removed some statements, reexpand the blocks */
@@ -862,7 +586,7 @@ namespace X360Decompiler
                 switch (stmt.Kind)
                 {
                     case CStatement.Kinds.Goto:
-                        if (continueBlock && stmt.BranchDestinationAddr == continueBlock.StartAddress)
+                        if (continueBlock != null && stmt.BranchDestinationAddr == continueBlock.StartAddress)
                             stmt.Kind = CStatement.Kinds.Continue;
                         else if (stmt.BranchDestinationAddr == breakBlock.StartAddress)
                             stmt.Kind = CStatement.Kinds.Break;
@@ -918,16 +642,16 @@ namespace X360Decompiler
             return true;
         }
 
-        private void DecompileEasy(int funcIndex)
+        private void DecompileEasy(Function f)
         {
-            foreach (FunctionBlock block in Functions[funcIndex].Blocks)
+            foreach (FunctionBlock block in f.Blocks)
             {
-                uint offset = pe.Rva2Offset(block.StartAddress - (uint)pe.optHdr.ImageBase);
+                uint offset = state.Pe.Rva2Offset(block.StartAddress - (uint)state.Pe.optHdr.ImageBase);
 
                 for (uint i = 0; i < block.InstrCount; i++)
                 {
-                    uint instruction = pe.ReadInstruction(offset + i * 4);
-                    XenonInstructions.OpCodeInfo info = instrs.GetInfo(instruction);
+                    uint instruction = state.Pe.ReadInstruction(offset + i * 4);
+                    XenonInstructions.OpCodeInfo info = state.Instructions.GetInfo(instruction);
 
                     if (info.CEquivalent != null)
                     {
@@ -1040,6 +764,12 @@ namespace X360Decompiler
                     live = newLive;
                 }
             }
+        }
+
+        private void SaveProject(object sender, RoutedEventArgs e)
+        {
+            String exeFile = state.Pe.FileName;
+            
         }
     }
 }

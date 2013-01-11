@@ -7,7 +7,7 @@ using System.Windows;
 
 namespace X360Decompiler
 {
-    class XenonInstructions
+    public class XenonInstructions
     {
         public const int OP_UNKNOWN = 0x1;
         public const int OP_ENDBLOCK = 0x2;
@@ -731,7 +731,7 @@ namespace X360Decompiler
 	        throw new Exception("XenonParser: How the f*** did you get here??");
         }
 
-        class Instruction
+        public class Instruction
         {
             public Instruction(uint instr)
             {
@@ -841,6 +841,11 @@ namespace X360Decompiler
             public uint TO()
             {
                 return ((OpCode >> 21) & 0x1F);
+            }
+
+            public bool AA()
+            {
+                return (OpCode & 2) == 2;
             }
 
             public uint OpCode;

@@ -9,6 +9,8 @@ namespace X360Decompiler
 {
     public class XPeParser
     {
+        public String FileName;
+
         const int IMAGE_DOS_SIGNATURE = 0x5A4D;
         const int IMAGE_NT_SIGNATURE = 0x00004550;
         const int PE_MAGIC_32 = 0x10B;
@@ -222,6 +224,8 @@ namespace X360Decompiler
             sectHdrs = new SectionHeader[imHdr.NumberOfSections];
             for (int i = 0; i < imHdr.NumberOfSections; i++)
                 sectHdrs[i] = new SectionHeader(br);
+
+            FileName = path;
         }
 
         public uint Rva2Offset(uint rva)
@@ -257,6 +261,11 @@ namespace X360Decompiler
             byte[] temp = BitConverter.GetBytes(res);
             Array.Reverse(temp);
             return BitConverter.ToUInt32(temp, 0);
+        }
+
+        public ulong GetImageBase()
+        {
+            return optHdr.ImageBase;
         }
     }
 }

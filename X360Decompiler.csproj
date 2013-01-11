@@ -89,6 +89,11 @@
       <DependentUpon>CSource.xaml</DependentUpon>
     </Compile>
     <Compile Include="CStatement.cs" />
+    <Compile Include="Decompiler.cs" />
+    <Compile Include="Disassembler.cs" />
+    <Compile Include="Function.cs" />
+    <Compile Include="Loop.cs" />
+    <Compile Include="State.cs" />
     <Compile Include="XenonInstructions.cs" />
     <Compile Include="XPeParser.cs" />
     <Compile Include="MainWindow.xaml.cs">
@@ -124,7 +129,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\PdbParser\PdbParser\PdbParser.vcxproj">
+    <ProjectReference Include="..\PdbParser\PdbParser\PdbParser.vcxproj">
       <Project>{5cf6945c-fd48-4a26-8334-80c219ef9747}</Project>
       <Name>PdbParser</Name>
     </ProjectReference>
