@@ -1,0 +1,8 @@
+﻿<Window x:Class="X360Decompiler.CSource"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CSource" Height="300" Width="300">
+    <Grid>
+        <TextBox x:Name="src" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" AcceptsReturn="True" IsReadOnly="True" />
+    </Grid>
+</Window>

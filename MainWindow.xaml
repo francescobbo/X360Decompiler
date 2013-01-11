@@ -1,0 +1,47 @@
+﻿<Window x:Class="X360Decompiler.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        DataContext="{Binding RelativeSource={RelativeSource Self}}"
+        Title="MainWindow" Height="550" Width="950">
+    <Window.Resources>
+        <ContextMenu x:Key="FunctionContextMenu">
+            <MenuItem Header="Disassemble" Click="DisassembleFunction" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
+            <MenuItem Header="Decompile" Click="DecompileFunction" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
+        </ContextMenu>
+    </Window.Resources>
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="Open ._XEX" />
+                <MenuItem Header="Open ._EXE" Click="OpenExe" />
+                <MenuItem Name="PdbMenu" Header="Add ._PDB" IsEnabled="False" Click="OpenPdb" />
+            </MenuItem>
+        </Menu>
+        <ListView Name="FunctionsView" DockPanel.Dock="Left" Width="276" ItemsSource="{Binding FuncCollection}" VirtualizingPanel.IsVirtualizing="True">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="{x:Type ListViewItem}">
+                    <Setter Property="ContextMenu" Value="{StaticResource FunctionContextMenu}" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn DisplayMemberBinding="{Binding Path=FuncName}" Width="150">
+                        <GridViewColumnHeader Content="Function" Tag="Function" Click="SortClick" />
+                    </GridViewColumn>
+                    <GridViewColumn DisplayMemberBinding="{Binding Path=FuncAddr}" Width="100">
+                        <GridViewColumnHeader Content="Address" Tag="Address" Click="SortClick" />
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+        <ListView Name="Instructions" ItemsSource="{Binding InstrCollection}" VirtualizingPanel.IsVirtualizing="True">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn DisplayMemberBinding="{Binding Path=Address}" Width="150" Header="Address" />
+                    <GridViewColumn DisplayMemberBinding="{Binding Path=Mnemonic}" Width="100" Header="Mnemonic" />
+                    <GridViewColumn DisplayMemberBinding="{Binding Path=Parameters}" Width="100" Header="Parameters" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </DockPanel>
+</Window>
