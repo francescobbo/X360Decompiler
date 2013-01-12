@@ -13,6 +13,12 @@ namespace X360Decompiler
         public const int OP_ENDBLOCK = 0x2;
         public const int OP_SUBTABLE = 0x4;
 
+        static private State decompiler;
+        public XenonInstructions(State state)
+        {
+            decompiler = state;
+        }
+
         public enum Mnemonics
         {
 	        /* This OpCode was unused on the Xenon. We can use it to jump to HLE functions */
@@ -1065,16 +1071,23 @@ namespace X360Decompiler
             if ((instruction & 2) != 2)
                 destination += pc;
 
+            Function f = decompiler.Functions.Find(delegate(Function fn) { return fn.Address == destination; });
+            String destName;
+            if (f != null)
+                destName = f.Name;
+            else
+                destName = "L" + destination.ToString("X8");
+
             CStatement branch = new CStatement();
             if (i.LK())
             {
                 branch.Kind = CStatement.Kinds.Call;
-                branch.CallFuncName = "L" + destination.ToString("X8");
+                branch.CallFuncName = destName;
             }
             else
             {
                 branch.Kind = CStatement.Kinds.Goto;
-                branch.BranchDestination = "L" + destination.ToString("X8");
+                branch.BranchDestination = destName;
                 branch.BranchDestinationAddr = destination;
             }
 
@@ -1100,16 +1113,23 @@ namespace X360Decompiler
             if ((instruction & 2) != 2)
                 destination += pc;
 
+            Function f = decompiler.Functions.Find(delegate(Function fn) { return fn.Address == destination; });
+            String destName;
+            if (f != null)
+                destName = f.Name;
+            else
+                destName = "L" + destination.ToString("X8");
+
             CStatement branch = new CStatement();
             if (i.LK())
             {
                 branch.Kind = CStatement.Kinds.Call;
-                branch.CallFuncName = "L" + destination.ToString("X8");
+                branch.CallFuncName = destName;
             }
             else
             {
                 branch.Kind = CStatement.Kinds.Goto;
-                branch.BranchDestination = "L" + destination.ToString("X8");
+                branch.BranchDestination = destName;
                 branch.BranchDestinationAddr = destination;
             }
 
@@ -1242,10 +1262,19 @@ namespace X360Decompiler
         {
             Instruction i = new Instruction(instruction);
 
-            CStatement stat = new CStatement(CStatement.Kinds.Subtraction, RegName(i.RA()), (ulong)i.UIMM());
-            CStatement ass = new CStatement(CStatement.Kinds.Assignment, "cr" + i.CRFD(), stat);
+            CStatement ass;
+            if (i.UIMM() != 0)
+            {
+                CStatement stat = new CStatement(CStatement.Kinds.Subtraction, RegName(i.RA()), (ulong)i.UIMM());
+                if (!i.CmpLong())
+                    stat.OperandSizes = CStatement.Sizes.Int;
+                ass = new CStatement(CStatement.Kinds.Assignment, "cr" + i.CRFD(), stat);
+            }
+            else
+                ass = new CStatement(CStatement.Kinds.Assignment, "cr" + i.CRFD(), RegName(i.RA()));
+         
             if (!i.CmpLong())
-                ass.OperandSizes = stat.OperandSizes = CStatement.Sizes.Int;
+                ass.OperandSizes = CStatement.Sizes.Int;
 
             List<CStatement> stats = new List<CStatement>();
             stats.Add(ass);
@@ -1256,10 +1285,19 @@ namespace X360Decompiler
         {
             Instruction i = new Instruction(instruction);
 
-            CStatement stat = new CStatement(CStatement.Kinds.Subtraction, RegName(i.RA()), (ulong)i.UIMM());
-            CStatement ass = new CStatement(CStatement.Kinds.Assignment, "cr" + i.CRFD(), stat);
+            CStatement ass;
+            if (i.UIMM() != 0)
+            {
+                CStatement stat = new CStatement(CStatement.Kinds.Subtraction, RegName(i.RA()), (ulong)i.UIMM());
+                if (!i.CmpLong())
+                    stat.OperandSizes = CStatement.Sizes.Int;
+                ass = new CStatement(CStatement.Kinds.Assignment, "cr" + i.CRFD(), stat);
+            }
+            else
+                ass = new CStatement(CStatement.Kinds.Assignment, "cr" + i.CRFD(), RegName(i.RA()));
+            
             if (!i.CmpLong())
-                ass.OperandSizes = stat.OperandSizes = CStatement.Sizes.Int;
+                ass.OperandSizes = CStatement.Sizes.Int;
 
             List<CStatement> stats = new List<CStatement>();
             stats.Add(ass);
@@ -1461,7 +1499,7 @@ namespace X360Decompiler
 
             if (i.RS() == 0)
                 stat = new CStatement(CStatement.Kinds.Assignment, RegName(i.RA()), i.UIMM());
-            else if (i.RB() == 0)
+            else if (i.UIMM() == 0)
                 stat = new CStatement(CStatement.Kinds.Assignment, RegName(i.RA()), RegName(i.RS()));
             else
             {

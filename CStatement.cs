@@ -22,6 +22,7 @@ namespace X360Decompiler
             Conditional,
             DoWhile,
             Goto,
+            Label,
             LeftShift,
             Or,
             Return,
@@ -65,7 +66,8 @@ namespace X360Decompiler
 
         public String CallFuncName, BranchDestination;
         public uint BranchDestinationAddr;
-        public string BranchDestinationRegister;
+        public String BranchDestinationRegister;
+        public String LabelName;
 
         public CStatement Op1Cond, Op2Cond;
 
@@ -217,6 +219,8 @@ namespace X360Decompiler
                     return DoWhileToString(indentation);
                 case Kinds.Goto:
                     return GotoToString();
+                case Kinds.Label:
+                    return LabelName + ":";
                 case Kinds.LeftShift:
                     return LeftShiftToString();
                 case Kinds.RightShift:
@@ -438,7 +442,37 @@ namespace X360Decompiler
             }
         }
 
-        public class COperand
+        public void Replace(Dictionary<String, COperand> subs, bool op1)
+        {
+            if (op1)
+            {
+                if (Op1 != null && Op1.Kind == OperandKinds.Expression)
+                {
+                    Op1.Expr.Replace(subs, true);
+                    Op1.Expr.Replace(subs, false);
+                }
+                else if (Op1 != null && Op1.Kind == OperandKinds.Variable && subs.ContainsKey(Op1.Name))
+                    Op1 = subs[Op1.Name];
+            }
+            else
+            {
+                if (Op2 != null && Op2.Kind == OperandKinds.Expression)
+                {
+                    Op2.Expr.Replace(subs, true);
+                    Op2.Expr.Replace(subs, false);
+                }
+                else if (Op2 != null && Op2.Kind == OperandKinds.Variable && subs.ContainsKey(Op2.Name))
+                    Op2 = subs[Op2.Name];
+
+                if (Condition != null)
+                {
+                    Condition.Replace(subs, true);
+                    Condition.Replace(subs, false);
+                }
+            }
+        }
+
+        public class COperand : IEquatable<COperand>
         {
             public COperand()
             {
@@ -476,6 +510,28 @@ namespace X360Decompiler
                 Base2 = baseVar2;
             }
 
+            public bool Equals(COperand stat)
+            {
+                if (!Kind.Equals(stat.Kind))
+                    return false;
+
+                switch (Kind)
+                {
+                    case OperandKinds.AddressPointer:
+                        return Offset == stat.Offset;
+                    case OperandKinds.BaseBasePointer:
+                        return Base == stat.Base && Base2 == stat.Base2;
+                    case OperandKinds.BaseOffsetPointer:
+                        return Base == stat.Base && Offset == stat.Offset;
+                    case OperandKinds.Constant:
+                        return Value == stat.Value;
+                    case OperandKinds.Variable:
+                        return Name == stat.Name;
+                    default:
+                        throw new Exception("Unable to compare exprs");
+                }
+            }
+
             public OperandKinds Kind;
             public Sizes OperandSize = Sizes.Long;
 
@@ -486,10 +542,10 @@ namespace X360Decompiler
 
             public List<String> GetUses()
             {
-                if (Kind == OperandKinds.Constant)
-                    return null;
-
                 List<String> ret = new List<string>();
+                
+                if (Kind == OperandKinds.Constant)
+                    return ret;
 
                 if (Kind == OperandKinds.Variable)
                     ret.Add(Name);

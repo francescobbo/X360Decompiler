@@ -9,11 +9,12 @@ namespace X360Decompiler
     public class State
     {
         public List<Function> Functions = new List<Function>();
-        public XenonInstructions Instructions = new XenonInstructions();
+        public XenonInstructions Instructions;
         public XPeParser Pe;
 
         public State(String exeName)
         {
+            Instructions = new XenonInstructions(this);
             Pe = new XPeParser(exeName);
             Instructions.SetupTables();
         }

@@ -212,19 +212,28 @@ namespace X360Decompiler
             DecompileEasy(f);
             ComputeUseDefs(f.Blocks);
             PropagateExpressions(f.Blocks);
-            LoopPhase2(f.Blocks, f.Loops);
-            IfElse(f.Blocks);
+            NiceConditions(f.Blocks);
+//            LoopPhase2(f.Blocks, f.Loops);
+//            IfElse(f.Blocks);
 
             List<CStatement> statements = new List<CStatement>();
             foreach (FunctionBlock b in f.Blocks)
+            {
+                CStatement label = new CStatement(CStatement.Kinds.Label);
+                label.LabelName = "L" + b.StartAddress.ToString("X8");
+
+                statements.Add(label);
                 statements.AddRange(b.Statements);
+            }
 
             string csource = "void " + f.Name + "()\n{\n";
             foreach (CStatement stat in statements)
             {
-                csource += "\t";
+                if (stat.Kind != CStatement.Kinds.Label)
+                    csource += "\t";
+
                 csource += stat.ToString(1);
-                if (stat.Kind != CStatement.Kinds.Conditional)
+                if (stat.Kind != CStatement.Kinds.Conditional && stat.Kind != CStatement.Kinds.Label)
                     csource += ";\n";
                 else
                     csource += "\n";
@@ -321,7 +330,43 @@ namespace X360Decompiler
             return loopSet;
         }
 
-        private void JoinCmpBc(List<FunctionBlock> blocks)
+        private void PropagateExpressions(List<FunctionBlock> blocks)
+        {
+            foreach (FunctionBlock b in blocks)
+            {
+                Dictionary<String, CStatement.COperand> var2expr = new Dictionary<String, CStatement.COperand>();
+                foreach (CStatement stat in b.Statements)
+                {
+                    stat.Replace(var2expr, false);
+
+                    if (stat.Kind == CStatement.Kinds.Assignment && stat.Op1.Kind == CStatement.OperandKinds.Variable)
+                    {
+                        foreach (KeyValuePair<String, CStatement.COperand> kvp in var2expr)
+                        {
+                            if (kvp.Value.GetUses().Contains(stat.Op1.Name))
+                            {
+                                /*
+                                 * r10 = 3 + r11
+                                 * r11 = 4 + r12
+                                 * r5 = r10 => 3 + r11 (INCORRECT!!)
+                                 * Remove r10 from the dictionary since a definition to r11 is made after it
+                                 */
+
+                                var2expr.Remove(kvp.Key);
+                                break;
+                            }
+                        }
+
+                        if (!stat.Op2.GetUses().Contains(stat.Op1.Name))
+                            var2expr[stat.Op1.Name] = stat.Op2;
+                    }
+                    else
+                        stat.Replace(var2expr, true);
+                }
+            }
+        }
+        
+        private void NiceConditions(List<FunctionBlock> blocks)
         {
             foreach (FunctionBlock b in blocks)
             {
@@ -334,85 +379,6 @@ namespace X360Decompiler
 
                     CStatement cond = If.Condition;
                     String cr = cond.Op1.Name;
-
-                    /* Take the last cr# = a - b or cr# = a */
-                    CStatement cmp = null;
-                    int j;
-                    int lastj = -1;
-                    for (j = 0; j < i; j++)
-                    {
-                        if (b.Statements[j].Kind == CStatement.Kinds.Assignment && b.Statements[j].Op1.Name == cr &&
-                            (b.Statements[j].Op2.Kind == CStatement.OperandKinds.Expression && b.Statements[j].Op2.Expr.Kind == CStatement.Kinds.Subtraction ||
-                             b.Statements[j].Op2.Kind == CStatement.OperandKinds.Variable))
-                        {
-                            cmp = b.Statements[j];
-                            lastj = j;
-                        }
-                    }
-
-                    if (cmp == null)
-                        continue;
-
-                    j = lastj;
-
-                    if (b.Statements[j].Op2.Kind == CStatement.OperandKinds.Expression)
-                    {
-                        CStatement.COperand op1 = b.Statements[j].Op2.Expr.Op1;
-                        CStatement.COperand op2 = b.Statements[j].Op2.Expr.Op2;
-
-                        String r1 = op1.Kind == CStatement.OperandKinds.Variable ? op1.Name : null;
-                        String r2 = op2.Kind == CStatement.OperandKinds.Variable ? op2.Name : null;
-
-                        /* Check that nor a nor b are written to until the if */
-                        bool canRemove = true;
-                        for (int k = j + 1; k < i; k++)
-                        {
-                            if (b.Statements[k].Kind == CStatement.Kinds.Assignment && b.Statements[k].Op1.Kind == CStatement.OperandKinds.Variable)
-                            {
-                                if (r1 != null && b.Statements[k].Op1.Name == r1)
-                                {
-                                    canRemove = false;
-                                    break;
-                                }
-
-                                if (r2 != null && b.Statements[k].Op1.Name == r2)
-                                {
-                                    canRemove = false;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (!canRemove)
-                            continue;
-
-                        If.Condition.Op1 = new CStatement.COperand(b.Statements[j].Op2.Expr);
-                        b.Statements.RemoveAt(j);
-                    }
-                    else
-                    {
-                        /* cr# = a */
-                        String var = b.Statements[j].Op2.Name;
-                        
-                        bool canRemove = true;
-                        for (int k = j + 1; k < i; k++)
-                        {
-                            if (b.Statements[k].Kind == CStatement.Kinds.Assignment && b.Statements[k].Op1.Kind == CStatement.OperandKinds.Variable)
-                            {
-                                if (b.Statements[k].Op1.Name == var)
-                                {
-                                    canRemove = false;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (!canRemove)
-                            continue;
-
-                        If.Condition.Op1 = new CStatement.COperand(var);
-                        b.Statements.RemoveAt(j);
-                    }
 
                     /* Simplify "a - 0 op 0" => "a op 0", and "a - b op 0" => "a op b" */
                     if (If.Condition.Op1.Kind == CStatement.OperandKinds.Expression)
@@ -530,55 +496,6 @@ namespace X360Decompiler
             }
         }
 
-        void PropagateExpressions(List<FunctionBlock> blocks)
-        {
-            foreach (FunctionBlock b in blocks)
-            {
-                foreach (CStatement i in b.Statements)
-                {
-                    /* On assignment, propagation on Op1 must be done after saving */
-                    if (i.Kind != CStatement.Kinds.Assignment)
-                        i.Op1 = ReplaceUses(b, i.Op1, i);
-                    i.Op2 = ReplaceUses(b, i.Op2, i);
-
-                    if (i.Kind == CStatement.Kinds.Assignment && i.Op1.Kind == CStatement.OperandKinds.Variable)
-                    {
-                        b.SavedVars[i.Op1.Name] = i;
-                        continue;
-                    }
-                    
-                    /* Now propagate on Op1 */
-                    if (i.Kind == CStatement.Kinds.Assignment)
-                        i.Op1 = ReplaceUses(b, i.Op1, i);
-                }
-            }
-        }
-
-        CStatement.COperand ReplaceUses(FunctionBlock b, CStatement.COperand n, CStatement stat)
-        {
-            if (n == null)
-                return null;
-
-            if (n.Kind == CStatement.OperandKinds.Expression)
-            {
-                n.Expr.Op1 = ReplaceUses(b, n.Expr.Op1, stat);
-                n.Expr.Op2 = ReplaceUses(b, n.Expr.Op2, stat);
-            }
-            
-            if (n.Kind == CStatement.OperandKinds.Variable && b.SavedVars.ContainsKey(n.Name))
-            {
-                String reg = n.Name;
-                if (!stat.LiveOut.Contains(reg))
-                {
-                    b.SavedVars.Remove(reg);
-                    return n;
-                }
-                n = b.SavedVars[reg].Op2;
-            }
-
-            return n;
-        }
-
         private void StructureBreakContinue(CStatement container, FunctionBlock continueBlock, FunctionBlock breakBlock)
         {
             foreach (CStatement stmt in container.InnerBlock)
@@ -596,7 +513,7 @@ namespace X360Decompiler
                         StructureBreakContinue(stmt, continueBlock, breakBlock);;
                         break;
                     default:
-                        /* Do not recurse to do/while, while and for, sinche they have their own continue and break blocks! */
+                        /* Do not recurse to do/while, while and for, since they have their own continue and break blocks! */
                         break;
                 }
             }
@@ -637,7 +554,7 @@ namespace X360Decompiler
             for (int j = 0; j < a.Count; j++)
             {
                 if (a[j] != b[j])
-                    return false; ;
+                    return false;
             }
             return true;
         }
@@ -678,8 +595,6 @@ namespace X360Decompiler
             {
                 b.Uses = new List<String>();
                 b.Defines = new List<String>();
-  //              b.Input = new List<String>();
-   //             b.Output = new List<String>();
 
                 for (int i = b.Statements.Count - 1; i >= 0; i--)
                 {
@@ -704,7 +619,7 @@ namespace X360Decompiler
                 }
             }
 
-            bool changed;
+/*            bool changed;
             do
             {
                 changed = false;
@@ -750,7 +665,7 @@ namespace X360Decompiler
                 foreach (FunctionBlock succ in b.Successors)
                     live.AddRange(succ.Input);
                 live = live.Distinct().ToList();
-
+            
                 for (int i = b.Statements.Count - 1; i >= 0; i--)
                 {
                     CStatement stat = b.Statements[i];
@@ -763,7 +678,7 @@ namespace X360Decompiler
                     stat.LiveOut = live;
                     live = newLive;
                 }
-            }
+            }*/
         }
 
         private void SaveProject(object sender, RoutedEventArgs e)

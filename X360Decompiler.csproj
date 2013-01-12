@@ -89,8 +89,6 @@
       <DependentUpon>CSource.xaml</DependentUpon>
     </Compile>
     <Compile Include="CStatement.cs" />
-    <Compile Include="Decompiler.cs" />
-    <Compile Include="Disassembler.cs" />
     <Compile Include="Function.cs" />
     <Compile Include="Loop.cs" />
     <Compile Include="State.cs" />
