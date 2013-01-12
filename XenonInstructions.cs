@@ -1081,14 +1081,23 @@ namespace X360Decompiler
             CStatement branch = new CStatement();
             if (i.LK())
             {
+                if (f != null && decompiler.IgnoredCalls.Contains(f))
+                    return new List<CStatement>();
+
                 branch.Kind = CStatement.Kinds.Call;
                 branch.CallFuncName = destName;
+                branch.CalledFunction = f;
             }
             else
             {
-                branch.Kind = CStatement.Kinds.Goto;
-                branch.BranchDestination = destName;
-                branch.BranchDestinationAddr = destination;
+                if (f != null && decompiler.CallIsRet.Contains(f))
+                    branch.Kind = CStatement.Kinds.Return;
+                else
+                {
+                    branch.Kind = CStatement.Kinds.Goto;
+                    branch.BranchDestination = destName;
+                    branch.BranchDestinationAddr = destination;
+                }
             }
 
             stats.Add(branch);
@@ -1123,14 +1132,23 @@ namespace X360Decompiler
             CStatement branch = new CStatement();
             if (i.LK())
             {
+                if (f != null && decompiler.IgnoredCalls.Contains(f))
+                    return new List<CStatement>();
+
                 branch.Kind = CStatement.Kinds.Call;
                 branch.CallFuncName = destName;
+                branch.CalledFunction = f;
             }
             else
             {
-                branch.Kind = CStatement.Kinds.Goto;
-                branch.BranchDestination = destName;
-                branch.BranchDestinationAddr = destination;
+                if (f != null && decompiler.CallIsRet.Contains(f))
+                    branch.Kind = CStatement.Kinds.Return;
+                else
+                {
+                    branch.Kind = CStatement.Kinds.Goto;
+                    branch.BranchDestination = destName;
+                    branch.BranchDestinationAddr = destination;
+                }
             }
 
             if (final == null)
@@ -1202,11 +1220,7 @@ namespace X360Decompiler
             {
                 if (CtrCondition != null)
                 {
-                    CStatement composite = new CStatement();
-                    composite.Kind = CStatement.Kinds.CompositeCondition;
-
-                    composite.Op1Cond = CrCondition;
-                    composite.Op2Cond = CtrCondition;
+                    CStatement composite = new CStatement(CStatement.Kinds.CompositeCondition, CrCondition, CtrCondition);
                     composite.ConditionSign = CStatement.Conditions.And;
 
                     final = new CStatement();
@@ -1451,7 +1465,7 @@ namespace X360Decompiler
             stats.Add(stat);
             return stats;
         }
-
+        
         static List<CStatement> Or_C(uint pc, uint instruction)
         {
             Instruction i = new Instruction(instruction);

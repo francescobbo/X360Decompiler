@@ -21,6 +21,8 @@ namespace X360Decompiler
 
         public String Name;
         public uint Address;
+        public int ArgCount = -1;
+        public List<Argument> Arguments = new List<Argument>();
         public uint Size;
         public List<FunctionBlock> Blocks = null;
         public List<Loop> Loops = null;

@@ -144,7 +144,7 @@ namespace X360Decompiler
             RvaSize[] RvaSizes;
         }
 
-        class SectionHeader
+        public class SectionHeader
         {
             public SectionHeader()
             {
@@ -266,6 +266,13 @@ namespace X360Decompiler
         public ulong GetImageBase()
         {
             return optHdr.ImageBase;
+        }
+
+        public SectionHeader GetSection(int section)
+        {
+            if (section < sectHdrs.Count())
+                return sectHdrs[section];
+            return null;
         }
     }
 }

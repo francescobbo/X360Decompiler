@@ -103,6 +103,7 @@ namespace X360Decompiler
             {
                 state = new State(ofd.FileName);
                 PdbMenu.IsEnabled = true;
+                SaveMenu.IsEnabled = true;
             }
         }
 
@@ -197,6 +198,22 @@ namespace X360Decompiler
             }
         }
 
+        private void JumpIsRet(object sender, RoutedEventArgs e)
+        {
+            ListViewFunction item = (ListViewFunction)FunctionsView.SelectedItem;
+            Function f = item.Details;
+
+            state.CallIsRet.Add(f);
+        }
+
+        private void IgnoreCalls(object sender, RoutedEventArgs e)
+        {
+            ListViewFunction item = (ListViewFunction)FunctionsView.SelectedItem;
+            Function f = item.Details;
+
+            state.IgnoredCalls.Add(f);
+        }
+
         private void DecompileFunction(object sender, RoutedEventArgs e)
         {
             ListViewFunction item = (ListViewFunction)FunctionsView.SelectedItem;
@@ -211,8 +228,8 @@ namespace X360Decompiler
             f.Loops = FindLoops(f.Blocks);
             DecompileEasy(f);
             ComputeUseDefs(f.Blocks);
-            PropagateExpressions(f.Blocks);
-            NiceConditions(f.Blocks);
+//            PropagateExpressions(f.Blocks);
+//            NiceConditions(f.Blocks);
 //            LoopPhase2(f.Blocks, f.Loops);
 //            IfElse(f.Blocks);
 
@@ -681,10 +698,63 @@ namespace X360Decompiler
             }*/
         }
 
+        String projFn = null;
+
+        private void OpenProject(object sender, RoutedEventArgs e)
+        {
+            Microsoft.Win32.OpenFileDialog ofd = new Microsoft.Win32.OpenFileDialog();
+            ofd.Filter = "x360Dec projects (*.xdp)|*.xdp";
+            bool? res = ofd.ShowDialog();
+
+            if (res == null || res == false)
+                return;
+
+            _FuncCollection.Clear();
+            projFn = ofd.FileName;
+            state = State.FromFile(projFn);
+
+            foreach (Function f in state.Functions)
+            {
+                ListViewFunction lvf = new ListViewFunction(f.Name, f.Address, f);
+                _FuncCollection.Add(lvf);
+                f.ListViewEntry = lvf;
+            }
+
+            SaveMenu.IsEnabled = true;
+            PdbMenu.IsEnabled = true;
+
+            ListCollectionView view = (ListCollectionView)CollectionViewSource.GetDefaultView(FunctionsView.ItemsSource);
+            view.CustomSort = nameSorter;
+        }
+
         private void SaveProject(object sender, RoutedEventArgs e)
         {
-            String exeFile = state.Pe.FileName;
-            
+            if (projFn == null)
+            {
+                String exeFile = state.Pe.FileName;
+                String fn = exeFile.Split('\\').Last().Split('.').First();
+
+                Microsoft.Win32.SaveFileDialog sfd = new Microsoft.Win32.SaveFileDialog();
+                sfd.Filter = "x360Dec projects (*.xdp)|*.xdp";
+                sfd.FileName = fn;
+                bool? res = sfd.ShowDialog();
+
+                if (res == null || res == false)
+                    return;
+
+                projFn = sfd.FileName;
+            }
+
+            state.SaveToFile(projFn);
+        }
+
+        private void OpenFuncProperties(object sender, RoutedEventArgs e)
+        {
+            ListViewFunction item = (ListViewFunction)FunctionsView.SelectedItem;
+            Function f = item.Details;
+
+            FunctionProperties fp = new FunctionProperties(f);
+            fp.ShowDialog();
         }
     }
 }

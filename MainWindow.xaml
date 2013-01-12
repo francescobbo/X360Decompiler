@@ -7,16 +7,22 @@
         <ContextMenu x:Key="FunctionContextMenu">
             <MenuItem Header="Disassemble" Click="DisassembleFunction" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
             <MenuItem Header="Decompile" Click="DecompileFunction" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
+            <Separator />
+            <MenuItem Header="Ignore calls to function" Click="IgnoreCalls" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
+            <MenuItem Header="Jump to this is return" Click="JumpIsRet" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
+            <Separator />
+            <MenuItem Header="Properties" Click="OpenFuncProperties" CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=Parent}" />
         </ContextMenu>
     </Window.Resources>
     <DockPanel>
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
+                <MenuItem Header="Open project" Click="OpenProject" />
                 <MenuItem Header="Open ._XEX" />
                 <MenuItem Header="Open ._EXE" Click="OpenExe" />
                 <MenuItem Name="PdbMenu" Header="Add ._PDB" IsEnabled="False" Click="OpenPdb" />
                 <Separator />
-                <MenuItem Header="Save project" Click="SaveProject" />
+                <MenuItem Name="SaveMenu" Header="Save project" IsEnabled="False" Click="SaveProject" />
             </MenuItem>
         </Menu>
         <ListView Name="FunctionsView" DockPanel.Dock="Left" Width="276" ItemsSource="{Binding FuncCollection}" VirtualizingPanel.IsVirtualizing="True">

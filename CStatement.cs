@@ -65,11 +65,10 @@ namespace X360Decompiler
         public FunctionBlock ContinueBlock;
 
         public String CallFuncName, BranchDestination;
+        public Function CalledFunction;
         public uint BranchDestinationAddr;
         public String BranchDestinationRegister;
         public String LabelName;
-
-        public CStatement Op1Cond, Op2Cond;
 
         public CStatement()
         {
@@ -262,7 +261,25 @@ namespace X360Decompiler
 
         private String CallToString()
         {
-            return CallFuncName + "()";
+            String ret = CallFuncName + "(";
+
+            if (CalledFunction != null)
+            {
+                if (CalledFunction.ArgCount == -1)
+                    ret += "r3, r4, r5, r6, r7";
+                else
+                {
+                    int n = 3;
+                    for (int i = 0; i < CalledFunction.ArgCount; i++, n++)
+                    {
+                        ret += ("r" + n);
+                        if (i != CalledFunction.ArgCount - 1)
+                            ret += ", ";
+                    }
+                }
+            }
+
+            return ret + ")";
         }
 
         private String ComparisonToString()
@@ -272,7 +289,7 @@ namespace X360Decompiler
 
         private String CompositeToString()
         {
-            return Op1Cond.ToString() + " " + ComparisonOperatorToString() + " " + Op2Cond.ToString();
+            return Op1.ToString() + " " + ComparisonOperatorToString() + " " + Op2.ToString();
         }
 
         private String ConditionalToString(int indentation)
@@ -591,7 +608,7 @@ namespace X360Decompiler
                         else
                             return "*(" + SizeToString() + " *)(&" + Base + "[" + Offset + "])";
                     case OperandKinds.BaseBasePointer:
-                        return "*(" + SizeToString() + " *)(" + Base + " + " + Base2 + ")";
+                        return "*(" + SizeToString() + " *)(" + Base + "[" + Base2 + "])";
                     case OperandKinds.Expression:
                         return "(" + Expr.ToString() + ")";
                 }
