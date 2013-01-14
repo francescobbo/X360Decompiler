@@ -22,7 +22,8 @@ namespace X360Decompiler
         public String Name;
         public uint Address;
         public int ArgCount = -1;
-        public List<Argument> Arguments = new List<Argument>();
+        public List<Variable> Arguments = new List<Variable>();
+        public CType Returns = new CType(CType.TypeKind.ValueType, "void");
         public uint Size;
         public List<FunctionBlock> Blocks = null;
         public List<Loop> Loops = null;

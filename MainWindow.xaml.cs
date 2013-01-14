@@ -121,16 +121,21 @@ namespace X360Decompiler
                 foreach (Symbol s in syms)
                 {
                     UInt32 addr = s.Rva + (uint) state.Pe.GetImageBase();
+                    XPeParser.SectionHeader section = state.Pe.GetSectionByAddress(s.Rva);
 
-                    Function f = new Function(state, s.Name, addr);
-                    f.Name = s.Name;
-                    f.Address = addr;
-                    
-                    ListViewFunction lvf = new ListViewFunction(s.Name, addr, f);
-                    _FuncCollection.Add(lvf);
+                    /* Code or Mem_Executable */
+                    if ((section.Characteristics & 0x20000020) != 0)
+                    {
+                        Function f = new Function(state, s.Name, addr);
+                        f.Name = s.Name;
+                        f.Address = addr;
 
-                    f.ListViewEntry = lvf;
-                    state.Functions.Add(f);
+                        ListViewFunction lvf = new ListViewFunction(s.Name, addr, f);
+                        _FuncCollection.Add(lvf);
+
+                        f.ListViewEntry = lvf;
+                        state.Functions.Add(f);
+                    }
                 }
 
                 state.Functions.Sort(FunctionAddressComparison);
@@ -755,6 +760,57 @@ namespace X360Decompiler
 
             FunctionProperties fp = new FunctionProperties(f);
             fp.ShowDialog();
+        }
+
+        String searchBuffer = "";
+        private void FunctionsView_KeyDown(object sender, KeyEventArgs e)
+        {
+            char c = (char)KeyInterop.VirtualKeyFromKey(e.Key);
+            if (c == '\b')
+            {
+                if (searchBuffer.Length != 0)
+                    searchBuffer = searchBuffer.Substring(0, searchBuffer.Length - 1);
+            }
+            else if (Char.IsLetterOrDigit(c))
+                searchBuffer += c;
+
+            SearchBufferView.Text = searchBuffer;
+            FunctionViewSearchNext();
+        }
+
+        private void FunctionViewSearchNext()
+        {
+            int curIndex = FunctionsView.SelectedIndex;
+            if (curIndex == -1)
+                curIndex = 0;
+
+            for (int i = curIndex; i < FunctionsView.Items.Count; i++)
+            {
+                ListViewFunction f = FunctionsView.Items[i] as ListViewFunction;
+                if (f.FuncName.StartsWith(searchBuffer, true, null))
+                {
+                    FunctionsViewScrollTo(i);
+                    return;
+                }
+            }
+
+            for (int i = 0; i < curIndex; i++)
+            {
+                ListViewFunction f = FunctionsView.Items[i] as ListViewFunction;
+                if (f.FuncName.StartsWith(searchBuffer, true, null))
+                {
+                    FunctionsViewScrollTo(i);
+                    return;
+                }
+            }
+        }
+
+        private void FunctionsViewScrollTo(int i)
+        {
+            FunctionsView.SelectedItem = FunctionsView.Items.GetItemAt(i);
+            FunctionsView.ScrollIntoView(FunctionsView.SelectedItem);
+            ListViewItem item = FunctionsView.ItemContainerGenerator.ContainerFromItem(FunctionsView.SelectedItem) as ListViewItem;
+            item.Focus();
         }
     }
 }

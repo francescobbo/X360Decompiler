@@ -90,7 +90,8 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Argument.cs" />
+    <Compile Include="Structure.cs" />
+    <Compile Include="Variable.cs" />
     <Compile Include="CSource.xaml.cs">
       <DependentUpon>CSource.xaml</DependentUpon>
     </Compile>
@@ -137,7 +138,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\PdbParser\PdbParser\PdbParser.vcxproj">
+    <ProjectReference Include="..\..\PdbParser\PdbParser\PdbParser.vcxproj">
       <Project>{5cf6945c-fd48-4a26-8334-80c219ef9747}</Project>
       <Name>PdbParser</Name>
     </ProjectReference>

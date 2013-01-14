@@ -6,14 +6,16 @@ using System.Threading.Tasks;
 
 namespace X360Decompiler
 {
-    public class Argument
+    [Serializable()]
+    public class Variable
     {
-        public String Name;
-        public CType Type = new CType(CType.TypeKind.Unknown);
+        public String Name { get; set; }
+        public CType Type { get; set; }
 
-        public Argument(String name)
+        public Variable(String name, CType type)
         {
             Name = name;
+            Type = type;
         }
     }
 }

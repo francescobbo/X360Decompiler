@@ -274,5 +274,16 @@ namespace X360Decompiler
                 return sectHdrs[section];
             return null;
         }
+
+        public SectionHeader GetSectionByAddress(uint address)
+        {
+            foreach (SectionHeader s in sectHdrs)
+            {
+                if (address >= s.VirtualAddress && address < s.VirtualAddress + s.VirtualSize)
+                    return s;
+            }
+
+            return null;
+        }
     }
 }

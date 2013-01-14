@@ -188,6 +188,18 @@ namespace X360Decompiler
 
             if (BranchDestinationRegister != null)
                 Uses.Add(BranchDestinationRegister);
+
+            if (Kind == Kinds.Call)
+            {
+                Defines.AddRange(new String[]{ "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12" });
+                if (CalledFunction != null && CalledFunction.ArgCount != -1)
+                {
+                    for (int i = 0; i < CalledFunction.ArgCount; i++)
+                        Uses.Add("r" + (i + 3));
+                }
+                else
+                    Uses.AddRange(new String[] { "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10" });
+            }
         }
 
         public String ToString(int indentation)

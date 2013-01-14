@@ -565,7 +565,7 @@ namespace X360Decompiler
 
         OpCodeInfo[] Table58 = new OpCodeInfo[]
         {
-	        new OpCodeInfo(0, Mnemonics.PPC_OP_LD, "ld", 0),
+	        new OpCodeInfo(0, Mnemonics.PPC_OP_LD, "ld", 0, Ld_C),
 	        new OpCodeInfo(1, Mnemonics.PPC_OP_LDU, "ldu", 0),
 	        new OpCodeInfo(2, Mnemonics.PPC_OP_LWA, "lwa", 0)
         };
@@ -1004,9 +1004,14 @@ namespace X360Decompiler
             CStatement branch = new CStatement();
             if (i.LK())
             {
-                branch.Kind = CStatement.Kinds.Call;
-                branch.CallFuncName = "ctr";
-                branch.BranchDestinationRegister = "ctr";
+                branch.Kind = CStatement.Kinds.Assignment;
+                branch.Op1 = new CStatement.COperand("r3");
+
+                CStatement realBranch = new CStatement(CStatement.Kinds.Call);
+                realBranch.CallFuncName = "ctr";
+                realBranch.BranchDestinationRegister = "ctr";
+
+                branch.Op2 = new CStatement.COperand(realBranch);
             }
             else
             {
@@ -1044,8 +1049,14 @@ namespace X360Decompiler
             CStatement branch = new CStatement();
             if (i.LK())
             {
-                branch.Kind = CStatement.Kinds.Call;
-                branch.CallFuncName = "lr";
+                branch.Kind = CStatement.Kinds.Assignment;
+                branch.Op1 = new CStatement.COperand("r3");
+
+                CStatement realBranch = new CStatement(CStatement.Kinds.Call);
+                realBranch.CallFuncName = "lr";
+                realBranch.BranchDestinationRegister = "lr";
+
+                branch.Op2 = new CStatement.COperand(realBranch);
             }
             else
                 branch.Kind = CStatement.Kinds.Return;
@@ -1084,9 +1095,23 @@ namespace X360Decompiler
                 if (f != null && decompiler.IgnoredCalls.Contains(f))
                     return new List<CStatement>();
 
-                branch.Kind = CStatement.Kinds.Call;
-                branch.CallFuncName = destName;
-                branch.CalledFunction = f;
+                if (f != null && f.Returns.Name == "void" && f.Returns.Kind == CType.TypeKind.ValueType)
+                {
+                    branch.Kind = CStatement.Kinds.Call;
+                    branch.CallFuncName = destName;
+                    branch.CalledFunction = f;
+                }
+                else
+                {
+                    branch.Kind = CStatement.Kinds.Assignment;
+                    branch.Op1 = new CStatement.COperand("r3");
+
+                    CStatement realBranch = new CStatement(CStatement.Kinds.Call);
+                    realBranch.CallFuncName = destName;
+                    realBranch.CalledFunction = f;
+
+                    branch.Op2 = new CStatement.COperand(realBranch);
+                }
             }
             else
             {
@@ -1135,9 +1160,23 @@ namespace X360Decompiler
                 if (f != null && decompiler.IgnoredCalls.Contains(f))
                     return new List<CStatement>();
 
-                branch.Kind = CStatement.Kinds.Call;
-                branch.CallFuncName = destName;
-                branch.CalledFunction = f;
+                if (f != null && f.Returns.Name == "void" && f.Returns.Kind == CType.TypeKind.ValueType)
+                {
+                    branch.Kind = CStatement.Kinds.Call;
+                    branch.CallFuncName = destName;
+                    branch.CalledFunction = f;
+                }
+                else
+                {
+                    branch.Kind = CStatement.Kinds.Assignment;
+                    branch.Op1 = new CStatement.COperand("r3");
+
+                    CStatement realBranch = new CStatement(CStatement.Kinds.Call);
+                    realBranch.CallFuncName = destName;
+                    realBranch.CalledFunction = f;
+
+                    branch.Op2 = new CStatement.COperand(realBranch);
+                }
             }
             else
             {
@@ -1356,6 +1395,27 @@ namespace X360Decompiler
             }
             else
                 stat.Op2 = new CStatement.COperand(RegName(i.RB()), 0);
+
+            List<CStatement> stats = new List<CStatement>();
+            stats.Add(stat);
+            return stats;
+        }
+
+        static List<CStatement> Ld_C(uint pc, uint instruction)
+        {
+            Instruction i = new Instruction(instruction);
+
+            CStatement stat = new CStatement(CStatement.Kinds.Assignment, RegName(i.RD()));
+
+            int ds = (int)i.DS() << 2;
+            if (i.RA() != 0)
+                stat.Op2 = new CStatement.COperand(RegName(i.RA()), ds);
+            else
+            {
+                stat.Op2 = new CStatement.COperand();
+                stat.Op2.Kind = CStatement.OperandKinds.AddressPointer;
+                stat.Op2.Offset = ds;
+            }
 
             List<CStatement> stats = new List<CStatement>();
             stats.Add(stat);

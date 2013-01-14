@@ -25,23 +25,28 @@
                 <MenuItem Name="SaveMenu" Header="Save project" IsEnabled="False" Click="SaveProject" />
             </MenuItem>
         </Menu>
-        <ListView Name="FunctionsView" DockPanel.Dock="Left" Width="276" ItemsSource="{Binding FuncCollection}" VirtualizingPanel.IsVirtualizing="True">
-            <ListView.ItemContainerStyle>
-                <Style TargetType="{x:Type ListViewItem}">
-                    <Setter Property="ContextMenu" Value="{StaticResource FunctionContextMenu}" />
-                </Style>
-            </ListView.ItemContainerStyle>
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn DisplayMemberBinding="{Binding Path=FuncName}" Width="150">
-                        <GridViewColumnHeader Content="Function" Tag="Function" Click="SortClick" />
-                    </GridViewColumn>
-                    <GridViewColumn DisplayMemberBinding="{Binding Path=FuncAddr}" Width="100">
-                        <GridViewColumnHeader Content="Address" Tag="Address" Click="SortClick" />
-                    </GridViewColumn>
-                </GridView>
-            </ListView.View>
-        </ListView>
+        <DockPanel DockPanel.Dock="Left" Width="276">
+            <TextBlock x:Name="SearchBufferView" DockPanel.Dock="Bottom">
+                
+            </TextBlock>
+            <ListView Name="FunctionsView" ItemsSource="{Binding FuncCollection}" VirtualizingPanel.IsVirtualizing="True" KeyDown="FunctionsView_KeyDown">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="{x:Type ListViewItem}">
+                        <Setter Property="ContextMenu" Value="{StaticResource FunctionContextMenu}" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn DisplayMemberBinding="{Binding Path=FuncName}" Width="150">
+                            <GridViewColumnHeader Content="Function" Tag="Function" Click="SortClick" />
+                        </GridViewColumn>
+                        <GridViewColumn DisplayMemberBinding="{Binding Path=FuncAddr}" Width="100">
+                            <GridViewColumnHeader Content="Address" Tag="Address" Click="SortClick" />
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </DockPanel>
         <ListView Name="Instructions" ItemsSource="{Binding InstrCollection}" VirtualizingPanel.IsVirtualizing="True">
             <ListView.View>
                 <GridView>
